@@ -58,8 +58,8 @@ class ADIO_dll_wrapper:
 
 class YAV_ADIO_GUI:
     _VERSION = '1.1.0.2020_03_10'
-    _WIDTH = 500
-    _HEIGHT = 400
+    _WIDTH = 800
+    _HEIGHT = 700
 
     @logger
     def __init__(self):
@@ -70,23 +70,29 @@ class YAV_ADIO_GUI:
         self.root.title("YAV ADIO data displayer (GUI) " + self._VERSION)
         frame1 = Frame(self.root, height=20)
         frame1.pack(side=TOP, padx=5, pady=5, fill=X)
-        self.l1 = Label(frame1, text="Point 1 Voltage: 0 V")
+        self.l1 = Label(frame1, text="Point 1 Voltage: 0 V, Point 2 Voltage: 0 V, Current: 0 A")
         self.l1.pack(side=LEFT, pady=5, padx=5)
-        self.l2 = Label(frame1, text="Point 2 Voltage: 0 V")
-        self.l2.pack(side=LEFT, pady=5, padx=5)
-        self.l3 = Label(frame1, text="Current: 0 A")
-        self.l3.pack(side=LEFT, pady=5, padx=5)
 
         self.fig = Figure(figsize=(5, 4), dpi=100)
         self.fig_time_array = np.arange(100)
         self.fig_voltage1_array = np.sin(self.fig_time_array * 2.7 * np.pi) + 20
-        self.fig_voltage2_array = np.cos(self.fig_time_array * 1.3 * np.pi) + 20
-        self.subplot = self.fig.add_subplot(111)
-        self.subplot.plot("time", "vol 1", self.fig_time_array, self.fig_voltage1_array)
-        self.subplot.plot(self.fig_time_array, self.fig_voltage2_array, color='red', linewidth=1.0, linestyle='--')
-        self.fig.legend("upper right")
+        self.fig_voltage2_array = np.cos(self.fig_time_array * 1.3 * np.pi) + 17
+        self.subplot1 = self.fig.add_subplot(211)
+        self.subplot1.set_xlabel("time(Sec.)")
+        self.subplot1.set_ylabel("voltage(V)")
+        self.subplot1.text(10, 10, "Vol1:{} V \nVol2:{} V".format(self.fig_voltage1_array[-1],
+                                                                self.fig_voltage2_array[-1]))
+        self.subplot1.plot(self.fig_time_array, self.fig_voltage1_array, label="voltage 1")
+        self.subplot1.plot(self.fig_time_array, self.fig_voltage2_array, color='red',
+                           linewidth=1.0, linestyle='--', label="voltage 2")
+        self.subplot2 = self.fig.add_subplot(212, sharex=self.subplot1)
+        self.subplot2.set_xlabel("time(Sec.)")
+        self.subplot2.set_ylabel("current(A)")
+        self.subplot2.plot(self.fig_time_array, self.fig_voltage1_array)
+        self.fig.legend()
 
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)  # A tk.DrawingArea.
+        self.ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
         canvas.draw()
         canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
@@ -106,18 +112,27 @@ class YAV_ADIO_GUI:
 
         mainloop()
 
+    @staticmethod
+    def array_pop_push(array, value=20):
+        _temp_list = list(array)
+        # del _temp_list[0]
+        _temp_list.append(value)
+        return np.array(_temp_list)
+
     def animate(self, _index):
-        graph_data = open('example.txt', 'r').read()
-        lines = graph_data.split('\n')
-        xs = []
-        ys = []
-        for line in lines:
-            if len(line) > 1:
-                x, y = line.split(',')
-                xs.append(float(x))
-                ys.append(float(y))
-        ax1.clear()
-        ax1.plot(xs, ys)
+        self.fig_time_array = self.array_pop_push(self.fig_time_array, self.fig_time_array[-1] + 1)
+        self.fig_voltage1_array = self.array_pop_push(self.fig_voltage1_array, 20)
+        self.fig_voltage2_array = self.array_pop_push(self.fig_voltage2_array, 15)
+        self.l1['text'] = "Point 1 Voltage: {} V, Point 2 Voltage: {} V, Current: {} A".format(
+            self.fig_voltage1_array[-1], self.fig_voltage2_array[-1], self.fig_voltage1_array[-1]
+        )
+
+        self.subplot2.clear()
+        self.subplot1.clear()
+        self.subplot2.plot(self.fig_time_array, self.fig_voltage1_array)
+        self.subplot1.plot(self.fig_time_array, self.fig_voltage1_array, label="voltage 1")
+        self.subplot1.plot(self.fig_time_array, self.fig_voltage2_array, color='red',
+                           linewidth=1.0, linestyle='--', label="voltage 2")
 
 
 if __name__ == "__main__":
