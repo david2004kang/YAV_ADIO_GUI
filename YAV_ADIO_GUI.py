@@ -12,6 +12,7 @@ from matplotlib.backends.backend_tkagg import (
 # Implement the default Matplotlib key bindings.
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.figure import Figure
+import ctypes
 
 __author__ = 'David Kang'
 import numpy as np
@@ -23,11 +24,13 @@ class ADIO_dll_wrapper:
     _ADIO_path = os.getcwd() + "\\ADIO64.dll"
     _LENGHT = 64
     output_data = [0 for x in range(_LENGHT)]
+    value_1 = 0.0
+    value_2 = 0.0
 
     @logger
     def __init__(self):
         self._thread_handler = threading
-        self.testing_thread = threading.Thread(target=self.threading_run_task)
+        self.testing_thread = threading.Thread(target=self.thread_run_task)
         self.testing_thread.setDaemon(True)
         self.testing_thread.start()
 
@@ -40,7 +43,7 @@ class ADIO_dll_wrapper:
         logging.debug("loading ADIO64.dll...")
         _kernel32 = ctypes.WinDLL('kernel32')
         _kernel32.LoadLibraryW.restype = ctypes.c_void_p
-        _dll_handler = kernel32.LoadLibraryW(unicode(adio_path))
+        _dll_handler = _kernel32.LoadLibraryW(unicode(self._ADIO_path))
         _my_dll = ctypes.WinDLL(self._ADIO_path, handle=_dll_handler)
         adb_buffer = (ctypes.c_uint32 * 4096)()
         yav_param = (ctypes.c_int * 10)()
@@ -50,19 +53,24 @@ class ADIO_dll_wrapper:
         num.value = self._LENGHT
 
         while True:
-            _return = my_dll.GetYavData(0, adb_buffer, num, yav_param, cnt_buffer, dio_buffer)
+            _return = _my_dll.GetYavData(0, adb_buffer, num, yav_param, cnt_buffer, dio_buffer)
             if _return > 0:
-                for index in xrange(len(self.output_data)):
-                    self.output_data[index] = adb_buffer[index]
+                _temp_list = [adb_buffer[index] for index in xrange(len(self.output_data))]
+                _temp1_list = _temp_list[::2]
+                self.value_1 = sum(_temp1_list) / len(_temp1_list)
+                _temp2_list = _temp_list[1::2]
+                self.value_2 = sum(_temp2_list) / len(_temp2_list)
 
 
 class YAV_ADIO_GUI:
     _VERSION = '1.1.0.2020_03_10'
     _WIDTH = 800
     _HEIGHT = 700
+    _data_source = None
 
     @logger
     def __init__(self):
+        self._data_source = ADIO_dll_wrapper()
         self.root = Tk()
         _ico_list = glob.glob(os.getcwd() + "\\*.ico")
         if len(_ico_list) > 0:
@@ -70,7 +78,8 @@ class YAV_ADIO_GUI:
         self.root.title("YAV ADIO data displayer (GUI) " + self._VERSION)
         frame1 = Frame(self.root, height=20)
         frame1.pack(side=TOP, padx=5, pady=5, fill=X)
-        self.l1 = Label(frame1, text="Point 1 Voltage: 0 V, Point 2 Voltage: 0 V, Current: 0 A")
+        self.l1 = Label(frame1, text="Voltage: 0 V, Current: 0 A")
+        self.l1.config(font=("Courier", 14))
         self.l1.pack(side=LEFT, pady=5, padx=5)
 
         self.fig = Figure(figsize=(5, 4), dpi=100)
@@ -81,7 +90,7 @@ class YAV_ADIO_GUI:
         self.subplot1.set_xlabel("time(Sec.)")
         self.subplot1.set_ylabel("voltage(V)")
         self.subplot1.text(10, 10, "Vol1:{} V \nVol2:{} V".format(self.fig_voltage1_array[-1],
-                                                                self.fig_voltage2_array[-1]))
+                                                                  self.fig_voltage2_array[-1]))
         self.subplot1.plot(self.fig_time_array, self.fig_voltage1_array, label="voltage 1")
         self.subplot1.plot(self.fig_time_array, self.fig_voltage2_array, color='red',
                            linewidth=1.0, linestyle='--', label="voltage 2")
@@ -115,16 +124,20 @@ class YAV_ADIO_GUI:
     @staticmethod
     def array_pop_push(array, value=20):
         _temp_list = list(array)
-        # del _temp_list[0]
+        del _temp_list[0]
         _temp_list.append(value)
         return np.array(_temp_list)
 
     def animate(self, _index):
+        if self._data_source is None:
+            return
+        _temp_val1 = self._data_source.value_1
+        _temp_val2 = self._data_source.value_2
         self.fig_time_array = self.array_pop_push(self.fig_time_array, self.fig_time_array[-1] + 1)
-        self.fig_voltage1_array = self.array_pop_push(self.fig_voltage1_array, 20)
-        self.fig_voltage2_array = self.array_pop_push(self.fig_voltage2_array, 15)
-        self.l1['text'] = "Point 1 Voltage: {} V, Point 2 Voltage: {} V, Current: {} A".format(
-            self.fig_voltage1_array[-1], self.fig_voltage2_array[-1], self.fig_voltage1_array[-1]
+        self.fig_voltage1_array = self.array_pop_push(self.fig_voltage1_array, _temp_val1 * 50.0 / 4096)
+        self.fig_voltage2_array = self.array_pop_push(self.fig_voltage2_array, _temp_val2 * 50.0 / 4096)
+        self.l1['text'] = "Voltage: {} V, Current: {} A".format(
+            _temp_val1 * 50.0 / 4096, abs(_temp_val1 - _temp_val2) * 5000.0 / 4096
         )
 
         self.subplot2.clear()
